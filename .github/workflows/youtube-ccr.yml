@@ -1,0 +1,56 @@
+name: YouTube Skill via CCR
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Perintah, mis: /yt-chapters dari input/transcript.txt"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Pasang Claude Code dan Router
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          npm install -g @musistudio/claude-code-router
+
+      - name: Salin konfigurasi router ke folder home
+        run: |
+          mkdir -p ~/.claude-code-router
+          cp ccr/config.json ~/.claude-code-router/config.json
+
+      - name: Pasang skill YouTube
+        run: |
+          git clone https://github.com/Jakeschincariol/youtube-agent-skill.git /tmp/yt-skill
+          mkdir -p .claude/skills
+          cp -r /tmp/yt-skill/skills/yt-* .claude/skills/
+
+      - name: Jalankan router dan skill
+        env:
+          TASK: ${{ inputs.task }}
+        run: |
+          ccr start &
+          sleep 5
+          eval "$(ccr activate)"
+          claude -p "$TASK" --allowedTools Read,Write,Bash
+
+      - name: Simpan hasil
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Hasil YouTube skill"
+          git push
